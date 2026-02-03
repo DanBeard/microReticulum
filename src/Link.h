@@ -1,10 +1,14 @@
 #pragma once
-
 #include "Destination.h"
 #include "Type.h"
 
 #include <memory>
 #include <cassert>
+
+#include <memory>
+#include <cassert>
+
+#define _max(a,b) ((a)>(b)?(a):(b))
 
 namespace RNS {
 
@@ -127,6 +131,7 @@ namespace RNS {
 			resource _resource = nullptr;
 			resource_started _resource_started = nullptr;
 			resource_concluded _resource_concluded = nullptr;
+
 		friend class Link;
 		};
 
@@ -143,7 +148,6 @@ namespace RNS {
 			MEM("Link object copy created");
 		}
 		Link(const Destination& destination = {Type::NONE}, Callbacks::established established_callback = nullptr, Callbacks::closed closed_callback = nullptr, const Destination& owner = {Type::NONE}, const Bytes& peer_pub_bytes = {Bytes::NONE}, const Bytes& peer_sig_pub_bytes = {Bytes::NONE}, RNS::Type::Link::link_mode mode = MODE_DEFAULT);
-		//Link(const Destination& destination = {Type::NONE}, Callbacks::established established_callback = nullptr, Callbacks::closed closed_callback = nullptr, const Destination& owner = {Type::NONE}, const Bytes& peer_pub_bytes = {Bytes::NONE}, const Bytes& peer_sig_pub_bytes = {Bytes::NONE}, RNS::Type::Link::link_mode mode = MODE_DEFAULT);
 		virtual ~Link(){
 			MEM("Link object destroyed");
 		}

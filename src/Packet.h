@@ -18,6 +18,7 @@ namespace RNS {
 	class ProofDestination;
 	class PacketReceipt;
 	class Packet;
+	class Link;
 
 	class ProofDestination : public Destination {
 	public:
@@ -183,7 +184,7 @@ namespace RNS {
 		);
 		virtual ~Packet() {
 			MEM("Packet object destroyed, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
-		}			
+		}
 
 		inline Packet& operator = (const Packet& packet) {
 			_object = packet._object;
@@ -212,7 +213,7 @@ namespace RNS {
 		bool unpack();
 		PacketReceipt send();
 		bool resend();
-		void prove(const Destination& destination = {Type::NONE});
+		void prove (const Destination& destination = {Type::NONE}) const;
 		ProofDestination generate_proof_destination() const;
 		bool validate_proof_packet(const Packet& proof_packet);
 		bool validate_proof(const Bytes& proof);
@@ -233,6 +234,7 @@ namespace RNS {
 		inline Type::Destination::types destination_type() const { assert(_object); return _object->_destination_type; }
 		inline Type::Packet::types packet_type() const { assert(_object); return _object->_packet_type; }
 		inline Type::Packet::context_types context() const { assert(_object); return _object->_context; }
+		inline Type::Packet::context_flag context_flag() const { assert(_object); return _object->_context_flag; }
 		inline bool sent() const { assert(_object); return _object->_sent; }
 		inline double sent_at() const { assert(_object); return _object->_sent_at; }
 		inline bool create_receipt() const { assert(_object); return _object->_create_receipt; }
@@ -242,9 +244,12 @@ namespace RNS {
 		inline bool cached() const { assert(_object); return _object->_cached; }
 		inline const Bytes& packet_hash() const { assert(_object); return _object->_packet_hash; }
 		inline const Bytes& destination_hash() const { assert(_object); return _object->_destination_hash; }
+		inline void destination_hash(const Bytes& destination_hash) const { assert(_object); _object->_destination_hash = destination_hash; }
 		inline const Bytes& transport_id() const { assert(_object); return _object->_transport_id; }
 		inline const Bytes& raw() const { assert(_object); return _object->_raw; }
 		inline const Bytes& data() const { assert(_object); return _object->_data; }
+		inline const Bytes& ratchet_id() const { assert(_object); return _object->_ratchet_id; }
+		inline void ratchet_id(const Bytes& ratchet_id) { assert(_object); _object->_ratchet_id = ratchet_id; }
 		// CBA LINK
 		inline const Link& destination_link() const { assert(_object); return _object->_destination_link; }
 		//CBA Following method is only used by Resource to access decrypted resource advertisement form Link. Consider a better way.
@@ -293,7 +298,7 @@ namespace RNS {
 			Type::Destination::types _destination_type = Type::Destination::SINGLE;
 			Type::Packet::types _packet_type = Type::Packet::DATA;
 			Type::Packet::context_types _context = Type::Packet::CONTEXT_NONE;
-			uint8_t _context_flag = Type::Packet::FLAG_UNSET;
+			Type::Packet::context_flag _context_flag = Type::Packet::FLAG_UNSET;
 
 			uint8_t _flags = 0;
 			uint8_t _hops = 0;
@@ -307,7 +312,7 @@ namespace RNS {
 			bool _cached = false;		// whether packet has been cached
 			PacketReceipt _receipt = {Type::NONE};
 
-			uint16_t _MTU = Type::Reticulum::MTU;
+			uint16_t _MTU = Type::Reticulum::R_MTU;
 			double _sent_at = 0;
 
 			float _rssi = 0.0;

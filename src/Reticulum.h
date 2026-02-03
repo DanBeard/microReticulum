@@ -3,6 +3,7 @@
 #include "Transport.h"
 #include "Log.h"
 #include "Type.h"
+#include "Transport.h"
 #include "Utilities/OS.h"
 
 #include <vector>
@@ -41,7 +42,7 @@ namespace RNS {
 		static bool __use_implicit_proof;
 		static bool __allow_probes;
 		static bool panic_on_interface_error;
-
+	
 	public:
 		// Return the currently running Reticulum instance
 		inline static const Reticulum& get_instance() { return _instance; }
@@ -93,6 +94,7 @@ namespace RNS {
 		//void get_packet_rssi(const Bytes& packet_hash) const;
 		//void get_packet_snr(const Bytes& packet_hash) const;
 		//void get_packet_q(const Bytes& packet_hash) const;
+
 
 		/*
 		Returns whether proofs sent are explicit or implicit.

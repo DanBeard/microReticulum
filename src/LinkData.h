@@ -36,7 +36,7 @@ namespace RNS {
 
 		RNS::Type::Link::link_mode _mode = Link::MODE_DEFAULT;
 		double _rtt = 0.0;
-		uint16_t _mtu = RNS::Type::Reticulum::MTU;
+		uint16_t _mtu = RNS::Type::Reticulum::R_MTU;
 		uint16_t _mdu = 0;
 		uint16_t _establishment_cost = 0;
 		Link::Callbacks _callbacks;

@@ -5,6 +5,7 @@
 #include "Reticulum.h"
 #include "Transport.h"
 #include "Packet.h"
+#include "Utilities/OS.h"
 #include "Log.h"
 #include "Cryptography/Ed25519.h"
 #include "Cryptography/X25519.h"
@@ -90,7 +91,7 @@ Link::Link(const Destination& destination /*= {Type::NONE}*/, Callbacks::establi
 			DEBUGF("Signalling link MTU of %d for link", nh_hw_mtu);
 		}
 		else {
-			signalling_bytes = Link::signalling_bytes(RNS::Type::Reticulum::MTU, _object->_mode);
+			signalling_bytes = Link::signalling_bytes(RNS::Type::Reticulum::R_MTU, _object->_mode);
 		}
 		TRACEF("Establishing link with mode %d", _object->_mode);
         //p self.request_data = self.pub_bytes+self.sig_pub_bytes+signalling_bytes
@@ -113,8 +114,8 @@ Link::Link(const Destination& destination /*= {Type::NONE}*/, Callbacks::establi
 	//_object->_link_destination.link_id(_object->_link_id);
 
 	MEM("Link object created");
-}
 
+}
 
 /*static*/ Bytes Link::signalling_bytes(uint16_t mtu, link_mode mode) {
 	//p if not mode in Link.ENABLED_MODES: raise TypeError(f"Requested link mode {Link.MODE_DESCRIPTIONS[mode]} not enabled")
@@ -176,13 +177,16 @@ Link::Link(const Destination& destination /*= {Type::NONE}*/, Callbacks::establi
 }
 
 /*static*/ Link Link::validate_request( const Destination& owner, const Bytes& data, const Packet& packet) {
-	if (data.size() == ECPUBSIZE) {
+	if (data.size() == ECPUBSIZE || data.size() == ECPUBSIZE + LINK_MTU_SIZE) {
 		try {
 			Link link({Type::NONE}, nullptr, nullptr, owner, data.left(ECPUBSIZE/2), data.mid(ECPUBSIZE/2, ECPUBSIZE/2));
 			link.set_link_id(packet);
 			link.destination(packet.destination());
 			link.establishment_timeout(ESTABLISHMENT_TIMEOUT_PER_HOP * std::max((uint8_t)1, packet.hops()) + KEEPALIVE);
 			link.establishment_cost(link.establishment_cost() + packet.raw().size());
+			if (data.size() == ECPUBSIZE + LINK_MTU_SIZE) {
+				VERBOSE("Link request includes signalling bytes (mode+MTU)");
+			}
 			VERBOSEF("Validating link request %s", link.link_id().toHex().c_str());
 			TRACEF("Establishment timeout is %f for incoming link request %s", link.establishment_timeout(), link.link_id().toHex().c_str());
 			link.handshake();
@@ -192,7 +196,7 @@ Link::Link(const Destination& destination /*= {Type::NONE}*/, Callbacks::establi
 			Transport::register_link(link);
 			link.last_inbound(OS::time());
 			link.start_watchdog();
-			
+
 			DEBUGF("Incoming link request %s accepted", link.toString().c_str());
 			return link;
 		}
@@ -202,7 +206,7 @@ Link::Link(const Destination& destination /*= {Type::NONE}*/, Callbacks::establi
 		}
 	}
 	else {
-		DEBUG("Invalid link request payload size, dropping request");
+		DEBUGF("Invalid link request payload size %d, dropping request", (int)data.size());
 		return {Type::NONE};
 	}
 }
@@ -329,7 +333,7 @@ void Link::validate_proof(const Packet& packet) {
 					_object->_attached_interface = packet.receiving_interface();
 					_object->__remote_identity = _object->_destination.identity();
 					if (confirmed_mtu) _object->_mtu = confirmed_mtu;
-					else _object->_mtu = RNS::Type::Reticulum::MTU;
+					else _object->_mtu = RNS::Type::Reticulum::R_MTU;
 					update_mdu();
 					_object->_status = Type::Link::ACTIVE;
 					_object->_activated_at = OS::time();
@@ -1112,6 +1116,7 @@ void Link::receive(const Packet& packet) {
 					if (!_object->_initiator) {
 						rtt_packet(packet);
 					}
+					break;
 				}
 				case Type::Packet::LINKCLOSE:
 				{

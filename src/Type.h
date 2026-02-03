@@ -21,9 +21,6 @@ namespace RNS { namespace Type {
 	}
 
 	namespace Cryptography {
-		namespace Fernet {
-			static const uint8_t FERNET_OVERHEAD  = 48; // Bytes
-		}
 		namespace Token {
 			static const uint8_t TOKEN_OVERHEAD  = 48; // Bytes
 			enum token_mode {
@@ -49,7 +46,7 @@ namespace RNS { namespace Type {
 		Future minimum will probably be locked in at 251 bytes to support
 		networks with segments of different MTUs. Absolute minimum is 219.
 		*/
-		static const uint16_t MTU = 500;
+		static const uint16_t R_MTU = 500;
 
 		/*
 		Whether automatic link MTU discovery is enabled by default in this
@@ -101,7 +98,7 @@ namespace RNS { namespace Type {
 		static const uint16_t IFAC_MIN_SIZE    = 1;
 		//z IFAC_SALT        = bytes.fromhex("adf54d882c9a9b80771eb4995d702d4a3e733391b2a0f53f416d9f907e55cff8")
 
-		static const uint16_t MDU              = MTU - HEADER_MAXSIZE - IFAC_MIN_SIZE;
+		static const uint16_t MDU              = R_MTU - HEADER_MAXSIZE - IFAC_MIN_SIZE;
 
 		static const uint32_t RESOURCE_CACHE   = 60*60*24;
 		// CBA TEST
@@ -144,9 +141,10 @@ namespace RNS { namespace Type {
 		*/
 		static const uint32_t RATCHET_EXPIRY = 60*60*24*30;
 
+
 		// Non-configurable constants
-		static const uint8_t FERNET_OVERHEAD           = Cryptography::Fernet::FERNET_OVERHEAD;
-	    static const uint8_t TOKEN_OVERHEAD            = Cryptography::Token::TOKEN_OVERHEAD;
+		static const uint8_t TOKEN_OVERHEAD            = Cryptography::Token::TOKEN_OVERHEAD;
+		static const uint8_t AES_BLOCKSIZE           = 16;          // In bytes
 		static const uint8_t AES128_BLOCKSIZE           = 16;          // In bytes
 		static const uint16_t HASHLENGTH                = Reticulum::HASHLENGTH;	// In bits
 		static const uint16_t SIGLENGTH                 = KEYSIZE;     // In bits
@@ -190,6 +188,12 @@ namespace RNS { namespace Type {
 
 		const uint8_t PR_TAG_WINDOW = 30;
 
+		//The default number of generated ratchet keys a destination will retain, if it has ratchets enabled.
+		const uint16_t RATCHET_COUNT = 512;
+
+ 		// The minimum interval between rotating ratchet keys, in seconds.
+    	const uint16_t RATCHET_INTERVAL = 30*60;
+ 
 	}
 
 	namespace Link {
@@ -200,8 +204,8 @@ namespace RNS { namespace Type {
 		static const uint16_t ECPUBSIZE         = 32+32;
 		static const uint8_t KEYSIZE           = 32;
 
-		//static const uint16_t MDU = floor((Reticulum::MTU-Reticulum::IFAC_MIN_SIZE-Reticulum::HEADER_MINSIZE-Identity::FERNET_OVERHEAD)/Identity::AES128_BLOCKSIZE)*Identity::AES128_BLOCKSIZE - 1;
-		static const uint16_t MDU = ((Reticulum::MTU-Reticulum::IFAC_MIN_SIZE-Reticulum::HEADER_MINSIZE-Identity::FERNET_OVERHEAD)/Identity::AES128_BLOCKSIZE)*Identity::AES128_BLOCKSIZE - 1;
+		//static const uint16_t MDU = floor((Reticulum::MTU-Reticulum::IFAC_MIN_SIZE-Reticulum::HEADER_MINSIZE-Identity::TOKEN_OVERHEAD)/Identity::AES128_BLOCKSIZE)*Identity::AES128_BLOCKSIZE - 1;
+		static const uint16_t MDU = ((Reticulum::R_MTU-Reticulum::IFAC_MIN_SIZE-Reticulum::HEADER_MINSIZE-Identity::TOKEN_OVERHEAD)/Identity::AES_BLOCKSIZE)*Identity::AES_BLOCKSIZE - 1;
 
 		// Timeout for link establishment in seconds per hop to destination.
 		static const uint8_t ESTABLISHMENT_TIMEOUT_PER_HOP = Reticulum::DEFAULT_PER_HOP_TIMEOUT;
@@ -223,7 +227,7 @@ namespace RNS { namespace Type {
 		``KEEPALIVE_TIMEOUT_FACTOR`` + ``STALE_GRACE``, the link is considered timed out,
 		and will be torn down.
 		*/
-	    static const uint8_t STALE_FACTOR = 2;
+		static const uint8_t STALE_FACTOR = 2;
 		static const uint16_t STALE_TIME = 2*KEEPALIVE;
 
 		static const uint8_t WATCHDOG_MAX_SLEEP  = 5;
@@ -344,10 +348,10 @@ namespace RNS { namespace Type {
 			LRPROOF        = 0xFF,    // Packet is a link request proof
 		};
 
-    	// Context flag values
+		// Context flag values
 		enum context_flag {
-    		FLAG_SET       = 0x01,
-    		FLAG_UNSET     = 0x00,
+			FLAG_SET       = 0x01,
+			FLAG_UNSET     = 0x00,
 		};
 
 		// This is used to calculate allowable
@@ -358,9 +362,9 @@ namespace RNS { namespace Type {
 		// With an MTU of 500, the maximum of data we can
 		// send in a single encrypted packet is given by
 		// the below calculation; 383 bytes.
-		//static const uint16_t ENCRYPTED_MDU  = floor((Reticulum::MDU-Identity::FERNET_OVERHEAD-Identity::KEYSIZE/16)/Identity::AES128_BLOCKSIZE)*Identity::AES128_BLOCKSIZE - 1;
+		//static const uint16_t ENCRYPTED_MDU  = floor((Reticulum::MDU-Identity::TOKEN_OVERHEAD-Identity::KEYSIZE/16)/Identity::AES128_BLOCKSIZE)*Identity::AES128_BLOCKSIZE - 1;
 		//static const uint16_t ENCRYPTED_MDU;
-		static const uint16_t ENCRYPTED_MDU  = ((Reticulum::MDU-Identity::FERNET_OVERHEAD-Identity::KEYSIZE/16)/Identity::AES128_BLOCKSIZE)*Identity::AES128_BLOCKSIZE - 1;
+		static const uint16_t ENCRYPTED_MDU  = ((Reticulum::MDU-Identity::TOKEN_OVERHEAD-Identity::KEYSIZE/16)/Identity::AES_BLOCKSIZE)*Identity::AES_BLOCKSIZE - 1;
 		// The maximum size of the payload data in a single encrypted packet 
 		static const uint16_t PLAIN_MDU      = MDU;
 		// The maximum size of the payload data in a single unencrypted packet
@@ -418,7 +422,6 @@ namespace RNS { namespace Type {
 		// TODO: Calculate an optimal number for this in
 		// various situations
 		static const uint8_t LOCAL_REBROADCASTS_MAX = 2;          // How many local rebroadcasts of an announce is allowed
-
 		static const uint8_t PATH_REQUEST_TIMEOUT = 15;           // Default timuout for client path requests in seconds
 		static constexpr const float PATH_REQUEST_GRACE     = 0.35;         // Grace time before a path announcement is made, allows directly reachable peers to respond first
 		static const uint8_t PATH_REQUEST_RW      = 2;            // Path request random window
@@ -459,11 +462,11 @@ namespace RNS { namespace Type {
 
 		// The maximum window size for transfers on fast links
 		static const uint8_t WINDOW_MAX_FAST      = 75;
-		
+
 		// For calculating maps and guard segments, this
 		// must be set to the global maximum window.
 		static const uint8_t WINDOW_MAX           = WINDOW_MAX_FAST;
-		
+
 		// If the fast rate is sustained for this many request
 		// rounds, the fast link window size will be allowed.
 		static const uint8_t FAST_RATE_THRESHOLD  = WINDOW_MAX_SLOW - WINDOW - 2;
@@ -501,7 +504,7 @@ namespace RNS { namespace Type {
 		// fit in 3 bytes in resource advertisements.
 		static const uint32_t MAX_EFFICIENT_SIZE      = 16 * 1024 * 1024 - 1;
 		static const uint8_t RESPONSE_MAX_GRACE_TIME = 10;
-		
+
 		// The maximum size to auto-compress with
 		// bz2 before sending.
 		static const uint32_t AUTO_COMPRESS_MAX_SIZE = MAX_EFFICIENT_SIZE;

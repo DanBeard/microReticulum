@@ -28,6 +28,7 @@
 
 
 #include <string>
+#include <cstring>
 
 //#define DEC 10
 //#define HEX 16

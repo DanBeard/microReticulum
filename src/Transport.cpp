@@ -374,7 +374,8 @@ using namespace RNS::Utilities;
 								announce_context,
 								Type::Transport::TRANSPORT,
 								Type::Packet::HEADER_2,
-								Transport::_identity.hash()
+								Transport::_identity.hash(),
+								announce_entry._packet.context_flag()
 							);
 
 							new_packet.hops(announce_entry._hops);
@@ -802,7 +803,7 @@ using namespace RNS::Utilities;
 				if (packet.destination().type() == Type::Destination::LINK) {
 					if (!packet.destination_link()) throw std::invalid_argument("Packet is not associated with a Link");
 					if (packet.destination_link().status() == Type::Link::CLOSED) {
-						TRACE("Transport::outbound: Pscket destination is link-closed, not transmitting");
+						TRACE("Transport::outbound: Packet destination is link-closed, not transmitting");
 						should_transmit = false;
 					}
 					// CBA Bug? Destination has no member attached_interface
@@ -1891,7 +1892,8 @@ using namespace RNS::Utilities;
 											announce_context,
 											Type::Transport::TRANSPORT,
 											Type::Packet::HEADER_2,
-											_identity.hash()
+											_identity.hash(),
+											packet.context_flag()
 										);
 
 										new_announce.hops(packet.hops());
@@ -1910,7 +1912,8 @@ using namespace RNS::Utilities;
 											announce_context,
 											Type::Transport::TRANSPORT,
 											Type::Packet::HEADER_2,
-											_identity.hash()
+											_identity.hash(),
+											packet.context_flag()
 										);
 
 										new_announce.hops(packet.hops());
@@ -1945,7 +1948,8 @@ using namespace RNS::Utilities;
 								Type::Packet::PATH_RESPONSE,
 								Type::Transport::TRANSPORT,
 								Type::Packet::HEADER_2,
-								_identity.hash()
+								_identity.hash(),
+								packet.context_flag()
 							);
 
 							new_announce.hops(packet.hops());
@@ -2049,6 +2053,9 @@ using namespace RNS::Utilities;
 		// Handling for link requests to local destinations
 		else if (packet.packet_type() == Type::Packet::LINKREQUEST) {
 			TRACE("Transport::inbound: Packet is LINKREQUEST");
+			TRACE(packet.transport_id().toHex());
+			TRACE(_identity.hash().toHex());
+
 			if (!packet.transport_id() || packet.transport_id() == _identity.hash()) {
 				TRACE("Transport::inbound: Checking if LINKREQUEST is for local destination");
 #if defined(DESTINATIONS_SET)
@@ -2057,6 +2064,7 @@ using namespace RNS::Utilities;
 #elif defined(DESTINATIONS_MAP)
 				auto iter = _destinations.find(packet.destination_hash());
 				if (iter != _destinations.end()) {
+					TRACE("CS1_1");
 					auto& destination = (*iter).second;
 					if (destination.type() == packet.destination_type()) {
 #endif
@@ -2067,6 +2075,8 @@ using namespace RNS::Utilities;
 #if defined(DESTINATIONS_SET)
 						const_cast<Destination&>(destination).receive(packet);
 #else
+
+TRACE("CS1_3");
 						destination.receive(packet);
 #endif
 					}
@@ -2084,7 +2094,7 @@ using namespace RNS::Utilities;
 				for (auto& link : active_links) {
 					if (link.link_id() == packet.destination_hash()) {
 						TRACE("Transport::inbound: Packet is DATA for an active LINK");
-						packet.link(link);
+						packet.link(const_cast<Link&>(link));
 						const_cast<Link&>(link).receive(packet);
 					}
 				}
@@ -2214,7 +2224,7 @@ using namespace RNS::Utilities;
 					std::set<Link> active_links(_active_links);
 					for (auto& link : active_links) {
 						if (link.link_id() == packet.destination_hash()) {
-							packet.link(link);
+							packet.link(const_cast<Link&>(link));
 						}
 					}
 				}
@@ -2438,7 +2448,7 @@ using namespace RNS::Utilities;
 /*static*/ void Transport::register_destination(Destination& destination) {
 	//TRACE("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
 	TRACE("Transport: Registering destination " + destination.toString());
-	destination.mtu(Type::Reticulum::MTU);
+	destination.mtu(Type::Reticulum::R_MTU);
 	if (destination.direction() == Type::Destination::IN) {
 #if defined(DESTINATIONS_SET)
 		for (auto& registered_destination : _destinations) {
@@ -2819,7 +2829,7 @@ Deregisters an announce handler.
 /*static*/ double Transport::first_hop_timeout(const Bytes& destination_hash) {
 	double latency = next_hop_per_byte_latency(destination_hash);
 	if (latency > 0.0) {
-		return RNS::Type::Reticulum::MTU * latency + RNS::Type::Reticulum::DEFAULT_PER_HOP_TIMEOUT;
+		return RNS::Type::Reticulum::R_MTU * latency + RNS::Type::Reticulum::DEFAULT_PER_HOP_TIMEOUT;
 	}
 	else {
 		return RNS::Type::Reticulum::DEFAULT_PER_HOP_TIMEOUT;
@@ -2828,7 +2838,7 @@ Deregisters an announce handler.
 
 /*static*/ double Transport::extra_link_proof_timeout(const Interface& interface) {
 	if (interface) {
-		return ((1.0/(double)interface.bitrate())*8.0)*RNS::Type::Reticulum::MTU;
+		return ((1.0/(double)interface.bitrate())*8.0)*RNS::Type::Reticulum::R_MTU;
 	}
 	else {
 		return 0.0;

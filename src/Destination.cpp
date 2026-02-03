@@ -4,6 +4,7 @@
 #include "Interface.h"
 #include "Packet.h"
 #include "Log.h"
+#include "Link.h"
 
 #include <vector>
 #include <time.h>
@@ -174,6 +175,55 @@ Destination::Destination(const Identity& identity, const Type::Destination::dire
 	return name;
 }
 
+const void Destination::_clean_ratchets()
+{
+	// CS TODO
+	/*
+	if self.ratchets != None:
+            if len (self.ratchets) > self.retained_ratchets:
+                self.ratchets = self.ratchets[:Destination.RATCHET_COUNT]
+				*/
+}
+
+const void Destination::_persist_ratchets()
+{
+	// CS TODO
+	/*
+	try:
+            with self.ratchet_file_lock:
+                packed_ratchets = umsgpack.packb(self.ratchets)
+                persisted_data = {"signature": self.sign(packed_ratchets), "ratchets": packed_ratchets}
+                ratchets_file = open(self.ratchets_path, "wb")
+                ratchets_file.write(umsgpack.packb(persisted_data))
+                ratchets_file.close()
+        except Exception as e:
+            self.ratchets = None
+            self.ratchets_path = None
+            raise OSError("Could not write ratchet file contents for "+str(self)+". The contained exception was: "+str(e), RNS.LOG_ERROR)
+
+			*/
+}
+
+const bool Destination::rotate_ratchets() 
+{
+	DEBUG("CS:rotate_ratchets");
+	if (!_object->ratchets.empty()) {
+		DEBUG("CS:ratchets not empty");
+		uint64_t now = RNS::Utilities::OS::ltime();
+		if (now > _object->latest_ratchet_time + RNS::Type::Destination::RATCHET_INTERVAL) {
+			RNS::log("Rotating ratchets for "+toString(), RNS::LOG_DEBUG);
+			Bytes new_ratchet = RNS::Identity::_generate_ratchet();
+			_object->latest_ratchet_time = RNS::Utilities::OS::ltime();
+			_clean_ratchets();
+			_persist_ratchets();
+		}
+		return true;
+	}
+	else {
+		RNS::log("Cannot rotate ratchet on "+toString()+", ratchets are not enabled", RNS::LOG_ERROR);
+	}
+}
+
 /*
 Creates an announce packet for this destination and broadcasts it on all
 relevant interfaces. Application specific data can be added to the announce.
@@ -193,6 +243,8 @@ Packet Destination::announce(const Bytes& app_data, bool path_response, const In
 	if (_object->_direction != IN) {
 		throw std::invalid_argument("Only IN destination types can be announced");
 	}
+
+	Bytes ratchet = {Bytes::NONE};
 
 	double now = OS::time();
     auto it = _object->_path_responses.begin();
@@ -255,6 +307,13 @@ Packet Destination::announce(const Bytes& app_data, bool path_response, const In
 		//p random_hash = Identity::get_random_hash()[0:5] << int(time.time()).to_bytes(5, "big")
 		// CBA TODO add in time to random hash
 		Bytes random_hash = Cryptography::random(Type::Identity::RANDOM_HASH_LENGTH/8);
+		DEBUG("CS: Announce: check with ratchtes");
+		if (!_object->ratchets.empty()) {
+			DEBUG("CS: Announce: ratchets not empty");
+			rotate_ratchets();
+			ratchet = RNS::Identity::_ratchet_public_bytes(_object->ratchets[0]);
+			RNS::Identity::_remember_ratchet(hash(), ratchet);
+		}
 
 		Bytes new_app_data(app_data);
         if (new_app_data.empty() && !_object->_default_app_data.empty()) {
@@ -268,7 +327,7 @@ Packet Destination::announce(const Bytes& app_data, bool path_response, const In
 		//TRACE("Destination::announce: random hash:  " + random_hash.toHex());
 		//TRACE("Destination::announce: app data:     " + new_app_data.toHex());
 		//TRACE("Destination::announce: app data text:" + new_app_data.toString());
-		signed_data << _object->_hash << _object->_identity.get_public_key() << _object->_name_hash << random_hash;
+		signed_data << _object->_hash << _object->_identity.get_public_key() << _object->_name_hash << random_hash << ratchet;
 		if (new_app_data) {
 			signed_data << new_app_data;
 		}
@@ -277,7 +336,7 @@ Packet Destination::announce(const Bytes& app_data, bool path_response, const In
 		Bytes signature(_object->_identity.sign(signed_data));
 		//TRACE("Destination::announce: signature:    " + signature.toHex());
 
-		announce_data << _object->_identity.get_public_key() << _object->_name_hash << random_hash << signature;
+		announce_data << _object->_identity.get_public_key() << _object->_name_hash << random_hash << ratchet << signature;
 
 		if (new_app_data) {
 			announce_data << new_app_data;
@@ -293,10 +352,16 @@ Packet Destination::announce(const Bytes& app_data, bool path_response, const In
 		announce_context = Type::Packet::PATH_RESPONSE;
 	}
 
+	Type::Packet::context_flag context_flag = RNS::Type::Packet::FLAG_UNSET;
+	if (!ratchet.empty()) {
+		context_flag = RNS::Type::Packet::FLAG_SET;
+		TRACE("CS: Destination:Announce Context_Flag set");
+	}
+
 	//TRACE("Destination::announce: creating announce packet...");
     //p announce_packet = RNS.Packet(self, announce_data, RNS.Packet.ANNOUNCE, context = announce_context, attached_interface = attached_interface)
 	//Packet announce_packet(*this, announce_data, Type::Packet::ANNOUNCE, announce_context, Type::Transport::BROADCAST, Type::Packet::HEADER_1, nullptr, attached_interface);
-	Packet announce_packet(*this, attached_interface, announce_data, Type::Packet::ANNOUNCE, announce_context, Type::Transport::BROADCAST, Type::Packet::HEADER_1);
+	Packet announce_packet(*this, attached_interface, announce_data, Type::Packet::ANNOUNCE, announce_context, Type::Transport::BROADCAST, Type::Packet::HEADER_1, context_flag);
 
 	if (send) {
 		TRACE("Destination::announce: sending announce packet...");
@@ -363,7 +428,8 @@ void Destination::receive(const Packet& packet) {
 	else {
 		// CBA TODO Why isn't the Packet decrypting itself?
 		Bytes plaintext(decrypt(packet.data()));
-		//TRACE("Destination::receive: decrypted data: " + plaintext.toHex());
+		const_cast<Packet&>(packet).ratchet_id(latest_ratched_id());
+		TRACE("Destination::receive: decrypted data: " + plaintext.toHex());
 		if (plaintext) {
 			if (packet.packet_type() == Type::Packet::DATA) {
 				if (_object->_callbacks._packet) {
@@ -379,12 +445,127 @@ void Destination::receive(const Packet& packet) {
 	}
 }
 
+void Destination::_reload_ratchets(std::string ratchets_path) {
+	assert(_object);
+	// CS TODO
+	/*
+	if os.path.isfile(ratchets_path):
+            with self.ratchet_file_lock:
+                def load_attempt():
+                    ratchets_file = open(ratchets_path, "rb")
+                    persisted_data = umsgpack.unpackb(ratchets_file.read())
+                    if "signature" in persisted_data and "ratchets" in persisted_data:
+                        if self.identity.validate(persisted_data["signature"], persisted_data["ratchets"]):
+                            self.ratchets = umsgpack.unpackb(persisted_data["ratchets"])
+                            self.ratchets_path = ratchets_path
+                        else:
+                            raise KeyError("Invalid ratchet file signature")
+                
+                try:
+                    try:
+                        load_attempt()
+
+                    except Exception as e:
+                        RNS.trace_exception(e)
+                        RNS.log(f"First ratchet reload attempt for {self} failed. Possible I/O conflict. Retrying in 500ms.", RNS.LOG_ERROR)
+                        time.sleep(0.5)
+                        load_attempt()
+                        RNS.log(f"Ratchet reload retry succeeded", RNS.LOG_DEBUG)
+
+                except Exception as e:
+                    self.ratchets = None
+                    self.ratchets_path = None
+                    RNS.trace_exception(e)
+                    raise OSError("Could not read ratchet file contents for "+str(self)+". The contained exception was: "+str(e), RNS.LOG_ERROR)
+        else:
+            RNS.log("No existing ratchet data found, initialising new ratchet file for "+str(self), RNS.LOG_DEBUG)
+            self.ratchets = []
+            self.ratchets_path = ratchets_path
+            self._persist_ratchets()s
+	*/
+	_object->ratchets.clear();
+	_object->ratchets.push_back({Bytes::NONE});
+	_object->ratchets_path = ratchets_path;
+}
+/*
+Enables ratchets on the destination. When ratchets are enabled, Reticulum will automatically rotate
+the keys used to encrypt packets to this destination, and include the latest ratchet key in announces.
+
+Enabling ratchets on a destination will provide forward secrecy for packets sent to that destination,
+even when sent outside a ``Link``. The normal Reticulum ``Link`` establishment procedure already performs
+its own ephemeral key exchange for each link establishment, which means that ratchets are not necessary
+to provide forward secrecy for links.
+
+Enabling ratchets will have a small impact on announce size, adding 32 bytes to every sent announce.
+
+:param ratchets_path: The path to a file to store ratchet data in.
+:returns: True if the operation succeeded, otherwise False.
+*/
+bool Destination::enable_ratchets(std::string ratchets_path) {
+	assert(_object);
+	if (!ratchets_path.empty()) {
+		_object->latest_ratchet_time = 0;
+		_reload_ratchets(ratchets_path);
+
+		// TODO: Remove at some point
+		RNS::log("Ratchets enabled on " + toString(), RNS::LOG_DEBUG);
+		return true;
+	}
+	return false;
+}
+/*
+When ratchet enforcement is enabled, this destination will never accept packets that use its
+base Identity key for encryption, but only accept packets encrypted with one of the retained
+ratchet keys.
+*/
+bool Destination::enforce_ratchets() {
+	assert(_object);
+	if (!_object->ratchets.empty()) {
+		_object->__enforce_ratchets = true;
+		RNS::log("Ratchets enforced on " + toString(), RNS::LOG_DEBUG);
+		return true;
+	}
+	return false;
+}
+/*
+Sets the number of previously generated ratchet keys this destination will retain,
+and try to use when decrypting incoming packets. Defaults to ``Destination.RATCHET_COUNT``.
+
+:param retained_ratchets: The number of generated ratchets to retain.
+:returns: True if the operation succeeded, False if not.
+*/
+bool Destination::set_retained_ratchets(uint8_t retained_ratchets) {
+	assert(_object);
+	if (retained_ratchets > 0) {
+		_object->retained_ratchets = retained_ratchets;
+		return true;
+	}
+	return false;
+}
+
+/*
+Sets the minimum interval in seconds between ratchet key rotation.
+Defaults to ``Destination.RATCHET_INTERVAL``.
+
+:param interval: The minimum interval in seconds.
+:returns: True if the operation succeeded, False if not.
+*/
+bool Destination::set_ratchet_interval(uint8_t interval) {
+	assert(_object);
+	if (interval > 0) {
+		_object->ratchet_interval = interval;
+		return true;
+	}
+	return false;
+}
+
 void Destination::incoming_link_request(const Bytes& data, const Packet& packet) {
 	assert(_object);
 	if (_object->_accept_link_requests) {
 TRACE("***** Accepting link request");
 		RNS::Link link = Link::validate_request(*this, data, packet);
 		if (link) {
+			DEBUG("Link is validated");
 			_object->_links.insert(link);
 		}
 	}
@@ -405,7 +586,12 @@ Encrypts information for ``RNS.Destination.SINGLE`` or ``RNS.Destination.GROUP``
 	}
 
 	if (_object->_type == SINGLE && _object->_identity) {
-		return _object->_identity.encrypt(data);
+		Bytes selected_ratchet = RNS::Identity::get_ratchet(hash());
+		if (!selected_ratchet.empty()) {
+			_object->latest_ratched_id = RNS::Identity::_get_ratchet_id(selected_ratchet);
+
+		}
+		return _object->_identity.encrypt(data, selected_ratchet);
 	}
 
 // TODO
@@ -442,7 +628,35 @@ Decrypts information for ``RNS.Destination.SINGLE`` or ``RNS.Destination.GROUP``
 	}
 
 	if (_object->_type == SINGLE && _object->_identity) {
-		return _object->_identity.decrypt(data);
+		if (!_object->ratchets.empty()) {
+			TRACE("CS: Destination:decrypt: decrypt with Ratchet");
+			Bytes decrypted = {Bytes::NONE};
+			try {
+				decrypted = _object->_identity.decrypt(data, _object->ratchets, _object->__enforce_ratchets, this);
+			}
+			catch (std::exception& e) {
+				decrypted = {Bytes::NONE};
+				
+				TRACE("CS: Destination:decrypt: decrypt with Ratchet failed");
+			}
+			
+			if (decrypted.empty()) {
+				try {
+					RNS::log("Decryption with ratchets failed on "+hash().toHex()+", reloading ratchets from storage and retrying", RNS::LOG_ERROR);
+					_reload_ratchets(_object->ratchets_path);
+					decrypted = _object->_identity.decrypt(data, _object->ratchets, _object->__enforce_ratchets, this);
+				}
+				catch (std::exception& e) {
+					ERRORF("Decryption still failing after ratchet reload. The contained exception was:  %s", e.what());
+					throw std::invalid_argument("Decryption still failing after ratchet reload. The contained exception was");
+				}
+
+				RNS::log("Decryption succeeded after ratchet reload", RNS::LOG_NOTICE);
+				return decrypted;
+			}
+		}
+
+		return _object->_identity.decrypt(data, _object->ratchets, _object->__enforce_ratchets, this);
 	}
 
 /*

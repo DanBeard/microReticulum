@@ -22,7 +22,7 @@ namespace RNS { namespace Cryptography {
 		using Ptr = std::shared_ptr<Fernet>;
 
 	public:
-		static inline const Bytes generate_key() { return random(32); }
+		static inline const Bytes generate_key() { return random(64); }
 
 	public:
 		Fernet(const Bytes& key);

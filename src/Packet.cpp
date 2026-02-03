@@ -18,7 +18,7 @@ ProofDestination::ProofDestination(const Packet& packet) : Destination({Type::NO
 {
 }
 
-Packet::Packet(const Destination& destination, const Interface& attached_interface, const Bytes& data, types packet_type /*= DATA*/, context_types context /*= CONTEXT_NONE*/, Type::Transport::types transport_type /*= Type::Transport::BROADCAST*/, header_types header_type /*= HEADER_1*/, const Bytes& transport_id /*= {Bytes::NONE}*/, bool create_receipt /*= true*/, context_flag context_flag /*= FLAG_UNSET*/) :
+Packet::Packet(const Destination& destination, const Interface& attached_interface, const Bytes& data, types packet_type /*= DATA*/, context_types context /*= CONTEXT_NONE*/, Type::Transport::types transport_type /*= Type::Transport::BROADCAST*/, header_types header_type /*= HEADER_1*/, const Bytes& transport_id /*= {Bytes::NONE}*/, bool create_receipt /*= true*/, Type::Packet::context_flag context_flag /*= FLAG_UNSET*/) :
 	_object(new Object(destination, attached_interface))
 {
 
@@ -45,6 +45,7 @@ Packet::Packet(const Destination& destination, const Interface& attached_interfa
 		_object->_flags = get_packed_flags();
 
 		_object->_create_receipt = create_receipt;
+		_object->_context_flag = context_flag;
 	}
 	else {
 		TRACE("Creating packet without destination...");
@@ -59,7 +60,7 @@ Packet::Packet(const Destination& destination, const Interface& attached_interfa
 }
 
 // CBA LINK
-Packet::Packet(const Link& link, const Bytes& data, Type::Packet::types packet_type /*= Type::Packet::DATA*/, Type::Packet::context_types context /*= Type::Packet::CONTEXT_NONE*/, context_flag context_flag /*= FLAG_UNSET*/) :
+Packet::Packet(const Link& link, const Bytes& data, Type::Packet::types packet_type /*= Type::Packet::DATA*/, Type::Packet::context_types context /*= Type::Packet::CONTEXT_NONE*/, Type::Packet::context_flag context_flag /*= FLAG_UNSET*/) :
 	//_object(new Object(link))
 	//Packet(link.destination(), data, packet_type, context, Type::Transport::BROADCAST, Type::Packet::HEADER_1, {Bytes::NONE}, true, context_flag)
 	// CBA Must use a destination that targets the Link itself instead of the original destination used to create the link
@@ -78,15 +79,17 @@ uint8_t Packet::get_packed_flags() {
 	assert(_object);
 	uint8_t packed_flags = 0;
 	if (_object->_context == LRPROOF) {
-TRACE("***** Packing with LINK type");
-		packed_flags = (_object->_header_type << 6) | (_object->_transport_type << 4) | (Type::Destination::LINK << 2) | _object->_packet_type;
+		packed_flags = (_object->_header_type << 6) | (_object->_context_flag << 5) | (_object->_transport_type << 4) | (Type::Destination::LINK << 2) | _object->_packet_type;
 	}
 	else {
 		if (!_object->_destination) {
 			throw std::logic_error("Packet destination is required");
 		}
-TRACEF("***** Packing with %d type", _object->_destination.type());
-		packed_flags = (_object->_header_type << 6) | (_object->_transport_type << 4) | (_object->_destination.type() << 2) | _object->_packet_type;
+		if (_object->_destination_link) {
+			_object->_destination_type = RNS::Type::Destination::LINK;
+			packed_flags = (_object->_header_type << 6) | (_object->_context_flag << 5) | (_object->_transport_type << 4) | (RNS::Type::Destination::LINK << 2) | _object->_packet_type;
+		}
+		else packed_flags = (_object->_header_type << 6) | (_object->_context_flag << 5) | (_object->_transport_type << 4) | (_object->_destination.type() << 2) | _object->_packet_type;
 	}
 	return packed_flags;
 }
@@ -94,7 +97,8 @@ TRACEF("***** Packing with %d type", _object->_destination.type());
 void Packet::unpack_flags(uint8_t flags) {
 	assert(_object);
 	_object->_header_type      = static_cast<header_types>((flags & 0b01000000) >> 6);
-	_object->_transport_type   = static_cast<Type::Transport::types>((flags & 0b00110000) >> 4);
+	_object->_context_flag     = static_cast<Type::Packet::context_flag>((flags & 0b00100000) >> 5);
+	_object->_transport_type   = static_cast<Type::Transport::types>((flags & 0b00010000) >> 4);
 	_object->_destination_type = static_cast<Type::Destination::types>((flags & 0b00001100) >> 2);
 	_object->_packet_type      = static_cast<types>(flags & 0b00000011);
 }
@@ -271,10 +275,16 @@ void Packet::pack() {
 	if (!_object->_destination) {
 		throw std::logic_error("Packet destination is required");
 	}
-	_object->_destination_hash = _object->_destination.hash();
+	if (_object->_destination_link) {
+		_object->_destination_hash = _object->_destination_link.hash();
+	}
+	else _object->_destination_hash = _object->_destination.hash();
 
 	_object->_header.clear();
 	_object->_encrypted = false;
+
+	// CS: Recreate flags
+	_object->_flags = get_packed_flags();
 
 	_object->_header << _object->_flags;
 	_object->_header << _object->_hops;
@@ -288,8 +298,14 @@ void Packet::pack() {
 	}
 	else {
 		if (_object->_header_type == HEADER_1) {
-			TRACE("Packet::pack: destination hash: " + _object->_destination.hash().toHex() );
-			_object->_header << _object->_destination.hash();
+			if (_object->_destination_link) {
+				TRACE("Packet::pack: link-destination hash: " + _object->_destination_link.hash().toHex());
+				_object->_header << _object->_destination_link.hash();
+			}
+			else {
+				TRACE("Packet::pack: destination hash: " + _object->_destination.hash().toHex() );
+				_object->_header << _object->_destination.hash();
+			}
 
 			if (_object->_packet_type == ANNOUNCE) {
 				// Announce packets are not encrypted
@@ -304,7 +320,6 @@ void Packet::pack() {
 				_object->_ciphertext = _object->_data;
 			}
 			// CBA LINK
-            //p elif self.packet_type == Packet.PROOF and self.destination.type == RNS.Destination.LINK:
 			else if (_object->_packet_type == PROOF && _object->_destination.type() == Type::Destination::LINK) {
 				// Packet proofs over links are not encrypted
 				_object->_ciphertext = _object->_data;
@@ -329,17 +344,13 @@ void Packet::pack() {
 				// CBA LINK
 				if (_object->_destination_link) {
 					_object->_ciphertext = _object->_destination_link.encrypt(_object->_data);
-TRACEF("***** Link data: %s", _object->_ciphertext.toHex().c_str());
 				}
 				else {
 					_object->_ciphertext = _object->_destination.encrypt(_object->_data);
-TRACEF("***** Destination Data: %s", _object->_ciphertext.toHex().c_str());
 				}
-				// CBA RATCHET
-				/*p TODO
-				if hasattr(self.destination, "latest_ratchet_id"):
-					self.ratchet_id = self.destination.latest_ratchet_id
-				*/
+				if (!_object->_destination.latest_ratched_id().empty()) {
+					_object->_ratchet_id = _object->_destination.latest_ratched_id();
+				}
 				_object->_encrypted = true;
 			}
 		}
@@ -498,7 +509,7 @@ bool Packet::resend() {
 	}
 }
 
-void Packet::prove(const Destination& destination /*= {Type::NONE}*/) {
+void Packet::prove(const Destination& destination /*= {Type::NONE}*/) const {
 	assert(_object);
 	TRACE("Packet::prove: proving packet...");
 	// CBA LINK
@@ -975,6 +986,7 @@ void PacketReceipt::check_timeout() {
 			//z thread = threading.Thread(target=self.callbacks.timeout, args=(self,))
 			//z thread.daemon = True
 			//z thread.start();
+			_object->_callbacks._timeout(*this);
 		}
 	}
 }

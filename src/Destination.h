@@ -73,10 +73,10 @@ namespace RNS {
 
 	public:
 		Destination(Type::NoneConstructor none) {
-			MEM("Destination NONE object created, this: " + std::to_string((uintptr_t)this));
+			DEBUG("Destination NONE object created, this: " + std::to_string((uintptr_t)this));
 		}
 		Destination(const Destination& destination) : _object(destination._object) {
-			MEM("Destination object copy created, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
+			DEBUG("Destination object copy created, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
 		}
 		Destination(
 			const Identity& identity,
@@ -95,7 +95,7 @@ namespace RNS {
 
 		inline Destination& operator = (const Destination& destination) {
 			_object = destination._object;
-			MEM("Destination object copy created by assignment, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
+			DEBUG("Destination object copy created by assignment, this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
 			return *this;
 		}
 		inline operator bool() const {
@@ -113,6 +113,10 @@ namespace RNS {
 		static Bytes hash_from_name_and_identity(const char* full_name, const Identity& identity);
 
 	public:
+		const void _clean_ratchets();
+		const void _persist_ratchets();
+		const bool rotate_ratchets();
+	
 		//Packet announce(const Bytes& app_data = {}, bool path_response = false, const Interface& attached_interface = {Type::NONE}, const Bytes& tag = {}, bool send = true);
 		Packet announce(const Bytes& app_data, bool path_response, const Interface& attached_interface, const Bytes& tag = {}, bool send = true);
 		Packet announce(const Bytes& app_data = {}, bool path_response = false);
@@ -174,6 +178,12 @@ namespace RNS {
 		void receive(const Packet& packet);
 		void incoming_link_request(const Bytes& data, const Packet& packet);
 
+		void _reload_ratchets(std::string ratchets_path);
+		bool enable_ratchets(std::string ratchets_path);
+		bool enforce_ratchets();
+		bool set_retained_ratchets(uint8_t retained_ratchets);
+		bool set_ratchet_interval(uint8_t interval);
+
 		virtual const Bytes encrypt(const Bytes& data);
 		virtual const Bytes decrypt(const Bytes& data);
 		virtual const Bytes sign(const Bytes& message);
@@ -186,6 +196,7 @@ namespace RNS {
 
 		// getters
 		inline Type::Destination::types type() const { assert(_object); return _object->_type; }
+		inline void type(Type::Destination::types type) const { assert(_object); _object->_type = type; }
 		inline Type::Destination::directions direction() const { assert(_object); return _object->_direction; }
 		inline Type::Destination::proof_strategies proof_strategy() const { assert(_object); return _object->_proof_strategy; }
 		inline const Bytes& hash() const { assert(_object); return _object->_hash; }
@@ -197,6 +208,8 @@ namespace RNS {
 		inline const Identity& identity() const { assert(_object); return _object->_identity; }
 		inline const std::map<Bytes, PathResponse>& path_responses() const { assert(_object); return _object->_path_responses; }
 		inline const std::map<Bytes, RequestHandler>& request_handlers() const { assert(_object); return _object->_request_handlers; }
+		inline const Bytes& latest_ratched_id() const { assert(_object); return _object->latest_ratched_id;}
+		inline const void latest_ratched_id(Bytes latest_ratched_id) const { assert(_object); _object->latest_ratched_id=latest_ratched_id;}
 
 		// setters
 		// CBA Don't allow changing destination hash after construction since it's used as key in collections
@@ -222,6 +235,15 @@ namespace RNS {
 			Type::Destination::directions _direction;
 			Type::Destination::proof_strategies _proof_strategy = Type::Destination::PROVE_NONE;
 			uint16_t _mtu = 0;
+			
+			std::vector<Bytes> ratchets;
+			std::string ratchets_path;
+			uint64_t latest_ratchet_time;
+			Bytes latest_ratched_id = {Bytes::NONE};
+			bool __enforce_ratchets = false;
+			uint16_t retained_ratchets = RNS::Type::Destination::RATCHET_COUNT;
+			uint16_t ratchet_interval = RNS::Type::Destination::RATCHET_INTERVAL;
+
 
 			std::map<Bytes, PathResponse> _path_responses;
 			std::set<Link> _links;

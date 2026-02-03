@@ -49,7 +49,7 @@ namespace RNS {
 
 		// CBA Virtual override method for custom interface to send outgoing data
 		virtual void send_outgoing(const Bytes& data) = 0;
-		
+
 		// CBA Internal method to handle housekeeping for data going out on interface
 		void handle_outgoing(const Bytes& data);
 		// CBA Internal method to handle data coming in on interface and pass on to transport

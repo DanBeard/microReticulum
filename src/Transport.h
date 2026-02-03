@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Packet.h"
+#include "Link.h"
 #include "Bytes.h"
 #include "Type.h"
 

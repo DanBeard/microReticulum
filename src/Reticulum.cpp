@@ -65,6 +65,7 @@ void Reticulum::sigterm_handler(signal, frame):
 	RNS.exit()
 */
 
+// Return the currently running Reticulum instance
 //def __init__(self,configdir=None, loglevel=None, logdest=None, verbosity=None):
 Reticulum::Reticulum() : _object(new Object()) {
 	MEM("Reticulum default object creating..., this: " + std::to_string((uintptr_t)this) + ", data: " + std::to_string((uintptr_t)_object.get()));
