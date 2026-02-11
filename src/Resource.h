@@ -56,32 +56,23 @@ namespace RNS {
 		}
 
 	public:
-	    //p static def accept(advertisement_packet, callback=None, progress_callback = None, request_id = None):
+		static Resource accept(const Packet& advertisement_packet, Callbacks::concluded callback = nullptr, Callbacks::progress progress_callback = nullptr, const Bytes& request_id = {Type::NONE});
 
 	public:
-//p def hashmap_update_packet(self, plaintext):
-//p def hashmap_update(self, segment, hashmap):
-//p def get_map_hash(self, data):
-//p def advertise(self):
-//p def __advertise_job(self):
-//p def watchdog_job(self):
-//p def __watchdog_job(self):
-//p def assemble(self):
-//p def prove(self):
+		Bytes get_map_hash(const Bytes& data) const;
+		void hashmap_update(uint16_t segment, const Bytes& hashmap_data);
+		void hashmap_update_packet(const Bytes& plaintext);
+		void receive_part(const Packet& packet);
+		void request_next();
+		void assemble();
+		void prove();
 		void validate_proof(const Bytes& proof_data);
-//p def receive_part(self, packet):
-//p def request_next(self):
-//p def request(self, request_data):
+		// Send-side methods
+		void advertise();
+		void request(const Bytes& request_data);
+		void send_hashmap_update(uint16_t segment);
 		void cancel();
-//p def set_callback(self, callback):
-//p def progress_callback(self, callback):
 		float get_progress() const;
-//p def get_transfer_size(self):
-//p def get_data_size(self):
-//p def get_parts(self):
-//p def get_segments(self):
-//p def get_hash(self):
-//p def is_compressed(self):
 		void set_concluded_callback(Callbacks::concluded callback);
 		void set_progress_callback(Callbacks::progress callback);
 
@@ -94,6 +85,8 @@ namespace RNS {
 		const Type::Resource::status status() const;
 		const size_t size() const;
 		const size_t total_size() const;
+		const Link& link() const;
+		bool initiator() const;
 
 		// setters
 
@@ -104,7 +97,35 @@ namespace RNS {
 
 
 	class ResourceAdvertisement {
+	public:
+		static ResourceAdvertisement unpack(const Bytes& data);
+		static Bytes pack(const ResourceAdvertisement& adv);
+		static bool is_request(const Packet& advertisement_packet);
+		static bool is_response(const Packet& advertisement_packet);
+		static Bytes read_request_id(const Packet& advertisement_packet);
+		static size_t read_transfer_size(const Packet& advertisement_packet);
+		static size_t read_size(const Packet& advertisement_packet);
 
+	public:
+		size_t t = 0;          // transfer size (encrypted)
+		size_t d = 0;          // data size (uncompressed)
+		uint16_t n = 0;        // number of parts
+		Bytes h;               // resource hash
+		Bytes r;               // random hash
+		Bytes o;               // original hash
+		Bytes m;               // hashmap (raw bytes)
+		uint8_t f = 0;         // flags
+		uint8_t i = 1;         // segment index
+		uint8_t l = 1;         // total segments
+		Bytes q;               // request id
+
+		// Decoded flags
+		bool e = false;        // encrypted
+		bool c = false;        // compressed
+		bool s = false;        // split
+		bool u = false;        // is_request
+		bool p = false;        // is_response
+		bool x = false;        // has_metadata
 	};
 
 }

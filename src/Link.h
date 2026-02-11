@@ -222,6 +222,8 @@ namespace RNS {
 		void set_resource_started_callback(Callbacks::resource_started callback);
 		void set_resource_concluded_callback(Callbacks::resource_concluded callback);
 		void resource_concluded(const Resource& resource);
+		Callbacks::resource_started callbacks_resource_started() const;
+		Callbacks::resource_concluded callbacks_resource_concluded() const;
 		void set_resource_strategy(Type::Link::resource_strategy strategy);
 		void register_outgoing_resource(const Resource& resource);
 		void register_incoming_resource(const Resource& resource);
