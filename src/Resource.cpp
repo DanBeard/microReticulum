@@ -12,11 +12,43 @@
 #include <algorithm>
 #include <cmath>
 
+#ifdef RET_BZ2_SUPPORT
+#include "bz2/bzlib.h"
+#endif
+
 using namespace RNS;
 using namespace RNS::Utilities;
 
 // Max resource size we'll accept (safety valve for embedded)
 static const size_t MAX_ACCEPT_SIZE = 64 * 1024;
+
+#ifdef RET_BZ2_SUPPORT
+// Max decompressed output size (safety valve)
+static const size_t MAX_DECOMPRESS_SIZE = 256 * 1024;
+
+static Bytes bz2_decompress(const Bytes& compressed, size_t expected_size) {
+	if (expected_size > MAX_DECOMPRESS_SIZE) {
+		ERRORF("bz2 output %zu exceeds cap %zu", expected_size, MAX_DECOMPRESS_SIZE);
+		return {Bytes::NONE};
+	}
+	unsigned int dest_len = (unsigned int)(expected_size + 1024);
+	uint8_t* dest = (uint8_t*)malloc(dest_len);
+	if (!dest) { ERROR("bz2 alloc failed"); return {Bytes::NONE}; }
+
+	int ret = BZ2_bzBuffToBuffDecompress(
+		(char*)dest, &dest_len,
+		(char*)compressed.data(), (unsigned int)compressed.size(),
+		0, 0);  // small=0, verbosity=0
+
+	if (ret != BZ_OK) {
+		ERRORF("bz2 decompress error %d", ret);
+		free(dest); return {Bytes::NONE};
+	}
+	Bytes result(dest, (size_t)dest_len);
+	free(dest);
+	return result;
+}
+#endif
 
 //Resource::Resource(const Link& link /*= {Type::NONE}*/) :
 //	_object(new ResourceData(link))
@@ -156,8 +188,10 @@ Resource::Resource(const Bytes& data, const Link& link, bool do_advertise /*= tr
 		ResourceAdvertisement adv = ResourceAdvertisement::unpack(const_cast<Packet&>(advertisement_packet).plaintext());
 
 		if (adv.c) {
-			ERROR("Resource is compressed (bz2), not supported");
+#ifndef RET_BZ2_SUPPORT
+			ERROR("Resource is compressed (bz2), compile with RET_BZ2_SUPPORT to enable");
 			return {Type::NONE};
+#endif
 		}
 
 		if (adv.t == 0 || adv.n == 0) {
@@ -453,12 +487,22 @@ void Resource::assemble() {
 		}
 		Bytes data = decrypted.mid(Type::Resource::RANDOM_HASH_SIZE);
 
-		// Decompress if compressed (not supported, should have been rejected in accept)
+		// Decompress if compressed
 		if (_object->_compressed) {
-			ERROR("bz2 decompression not supported");
+#ifdef RET_BZ2_SUPPORT
+			Bytes decompressed = bz2_decompress(data, _object->_total_size);
+			if (!decompressed) {
+				_object->_status = Type::Resource::CORRUPT;
+				_object->_link.resource_concluded(*this);
+				return;
+			}
+			data = decompressed;
+#else
+			ERROR("bz2 decompression not supported (compile with RET_BZ2_SUPPORT)");
 			_object->_status = Type::Resource::CORRUPT;
 			_object->_link.resource_concluded(*this);
 			return;
+#endif
 		}
 
 		_object->_data = data;
