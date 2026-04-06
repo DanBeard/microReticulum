@@ -464,7 +464,8 @@ namespace RNS {
 
 namespace RNS { namespace Persistence {
 
-	static DynamicJsonDocument _document(Type::Persistence::DOCUMENT_MAXSIZE);
+	// ArduinoJson 7: JsonDocument is auto-sized, no capacity argument needed.
+	static JsonDocument _document;
 	static Bytes _buffer(Type::Persistence::BUFFER_MAXSIZE);
 
 	template <typename T> size_t crc(const T& obj) {

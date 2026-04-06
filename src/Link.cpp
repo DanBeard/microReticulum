@@ -17,7 +17,12 @@
 #include <vector>
 
 #define MSGPACK_DEBUGLOG_ENABLE 0
+// MsgPack 0.4.2 still uses ArduinoJson 6's deprecated Static/DynamicJsonDocument.
+// Suppress those warnings at the include site so our own deprecation warnings remain visible.
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
 #include <MsgPack.h>
+#pragma GCC diagnostic pop
 
 #include <math.h>
 
