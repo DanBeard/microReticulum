@@ -34,9 +34,9 @@ namespace RNS { namespace Cryptography {
 		~Token();
 
 	public:
-		bool verify_hmac(const Bytes& token);
-		const Bytes encrypt(const Bytes& data);
-		const Bytes decrypt(const Bytes& token);
+		bool verify_hmac(const Bytes& token) const;
+		const Bytes encrypt(const Bytes& data) const;
+		const Bytes decrypt(const Bytes& token) const;
 
 	private:
 		RNS::Type::Cryptography::Token::token_mode _mode = RNS::Type::Cryptography::Token::MODE_AES_256_CBC;

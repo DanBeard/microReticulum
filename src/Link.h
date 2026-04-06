@@ -210,10 +210,10 @@ namespace RNS {
 		void response_resource_concluded(const Resource& resource);
 		//z const Channel& get_channel();
 		void receive(const Packet& packet);
-		const Bytes encrypt(const Bytes& plaintext);
-		const Bytes decrypt(const Bytes& ciphertext);
-		const Bytes sign(const Bytes& message);
-		bool validate(const Bytes& signature, const Bytes& message);
+		const Bytes encrypt(const Bytes& plaintext) const;
+		const Bytes decrypt(const Bytes& ciphertext) const;
+		const Bytes sign(const Bytes& message) const;
+		bool validate(const Bytes& signature, const Bytes& message) const;
 		void set_link_established_callback(Callbacks::established callback);
 		void set_link_closed_callback(Callbacks::closed callback);
 		void set_packet_callback(Callbacks::packet callback);

@@ -48,7 +48,7 @@ Token::~Token() {
 	MEM("Token object destroyed");
 }
 
-bool Token::verify_hmac(const Bytes& token) {
+bool Token::verify_hmac(const Bytes& token) const {
 
 	if (token.size() <= 32) {
 		throw std::invalid_argument("Cannot verify HMAC on token of only " + std::to_string(token.size()) + " bytes");
@@ -64,7 +64,7 @@ bool Token::verify_hmac(const Bytes& token) {
 	return (received_hmac == expected_hmac);
 }
 
-const Bytes Token::encrypt(const Bytes& data) {
+const Bytes Token::encrypt(const Bytes& data) const {
 
 	DEBUG("Token::encrypt: plaintext length: " + std::to_string(data.size()));
 	Bytes iv = random(16);
@@ -104,7 +104,7 @@ const Bytes Token::encrypt(const Bytes& data) {
 }
 
 
-const Bytes Token::decrypt(const Bytes& token) {
+const Bytes Token::decrypt(const Bytes& token) const {
 
 	DEBUG("Token::decrypt: token length: " + std::to_string(token.size()));
 	if (token.size() < 48) {

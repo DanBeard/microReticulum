@@ -1284,7 +1284,7 @@ void Link::receive(const Packet& packet) {
 	_object->_watchdog_lock = false;
 }
 
-const Bytes Link::encrypt(const Bytes& plaintext) {
+const Bytes Link::encrypt(const Bytes& plaintext) const {
 	assert(_object);
 	TRACE("Link::encrypt: encrypting data...");
 	try {
@@ -1305,7 +1305,7 @@ const Bytes Link::encrypt(const Bytes& plaintext) {
 	}
 }
 
-const Bytes Link::decrypt(const Bytes& ciphertext) {
+const Bytes Link::decrypt(const Bytes& ciphertext) const {
 	assert(_object);
 	TRACE("Link::decrypt: decrypting data...");
 	try {
@@ -1320,12 +1320,12 @@ const Bytes Link::decrypt(const Bytes& ciphertext) {
 	}
 }
 
-const Bytes Link::sign(const Bytes& message) {
+const Bytes Link::sign(const Bytes& message) const {
 	assert(_object);
 	return _object->_sig_prv->sign(message);
 }
 
-bool Link::validate(const Bytes& signature, const Bytes& message) {
+bool Link::validate(const Bytes& signature, const Bytes& message) const {
 	assert(_object);
 	try {
 		_object->_peer_sig_pub->verify(signature, message);

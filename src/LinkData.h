@@ -75,7 +75,7 @@ namespace RNS {
         float _expected_rate = 0.0;
 		Type::Link::teardown_reason _teardown_reason = Type::Link::TEARDOWN_NONE;
 
-		Cryptography::Token::Ptr _token;
+		mutable Cryptography::Token::Ptr _token;
 
 		Cryptography::X25519PrivateKey::Ptr _prv;
 		Bytes _prv_bytes;
