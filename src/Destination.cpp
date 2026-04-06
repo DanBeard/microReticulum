@@ -222,6 +222,7 @@ const bool Destination::rotate_ratchets()
 	else {
 		RNS::log("Cannot rotate ratchet on "+toString()+", ratchets are not enabled", RNS::LOG_ERROR);
 	}
+	return false;
 }
 
 /*
